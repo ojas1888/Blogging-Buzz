@@ -19,9 +19,9 @@ const {
 } = require("../../controllers/users/usersCtrl");
 const authMiddleware = require("../../middlewares/auth/authMiddleware");
 const {
-  profilePhotoUpload,
+  photoUpload,
   profilePhotoResize,
-} = require("../../middlewares/uploads/profilePhotoUpload");
+} = require("../../middlewares/uploads/photoUpload");
 
 const userRoutes = express.Router();
 
@@ -33,7 +33,7 @@ userRoutes.put("/follow", authMiddleware, followingUserCtrl);
 userRoutes.put("/unfollow", authMiddleware, unfollowUserCtrl);
 userRoutes.put("/block-user/:id", authMiddleware, blockUserCtrl);
 userRoutes.put("/unblock-user/:id", authMiddleware, unBlockUserCtrl);
-userRoutes.put("/profilephoto-upload",authMiddleware,profilePhotoUpload.single("image"),profilePhotoResize,profilePhotoUploadCtrl);
+userRoutes.put("/profilephoto-upload",authMiddleware,photoUpload.single("image"),profilePhotoResize,profilePhotoUploadCtrl);
 userRoutes.get("/profile/:id", authMiddleware, userProfileCtrl);
 userRoutes.put("/:id", authMiddleware, updateUserCtrl);
 userRoutes.delete("/:id", deleteUsersCtrl);
