@@ -3,11 +3,11 @@ const generateToken = require("../../config/token/generateToken");
 const User = require("../../model/user/User");
 const validateMongodbId = require("../../utils/validateMongodbID");
 const nodemailer=require("nodemailer");
-const crypto=require("crypto");
-const fs = require("fs");
-const Mailgen=require("mailgen");
-const { error } = require("console");
 const cloudinaryUploadImg = require("../../utils/cloudinary");
+const Mailgen=require("mailgen");
+const crypto = require("crypto");
+const fs = require("fs");
+const blockUser = require("../../utils/blockUser");
 
 //-------------------------------------
 //Register
@@ -40,6 +40,10 @@ const loginUserCtrl = expressAsyncHandler(async (req, res) => {
   const { email, password } = req.body;
   //check if user exists
   const userFound = await User.findOne({ email });
+  //check if blocked
+  if(userFound?.isBlocked){
+    throw new Error("Access is Denied You have been Blocked")
+  }
   //Check if password is match
   if (userFound && (await userFound.isPasswordMatched(password))) {
     res.json({
@@ -63,7 +67,7 @@ const loginUserCtrl = expressAsyncHandler(async (req, res) => {
 const fetchUsersCtrl = expressAsyncHandler(async (req, res) => {
   console.log(req.headers);
   try {
-    const users = await User.find({});
+    const users = await User.find({}).populate("posts");
     res.json(users);
   } catch (error) {
     res.json(error);
@@ -107,9 +111,26 @@ const fetchUserDetailsCtrl = expressAsyncHandler(async (req, res) => {
 const userProfileCtrl = expressAsyncHandler(async (req, res) => {
   const { id } = req.params;
   validateMongodbId(id);
+  //1. Find the login user
+  //2. Check this if the login user exists in the array of viewedBy
+  //Get the login user
+  const loginUserId=req?.user?._id.toString();
+  console.log(typeof loginUserId);
   try {
-    const myProfile = await User.findById(id).poppulate("posts");
-    res.json(myProfile);
+    const myProfile = await User.findById(id).populate("posts").populate("viewedBy");
+    const alreadyViewed=myProfile?.viewedBy?.find(user=>{
+      console.log(user);
+      return user?._id?.toString()==loginUserId;
+    });
+    if(alreadyViewed){
+      res.json(myProfile);
+    }
+    else{
+      const profile=await User.findByIdAndUpdate(myProfile?._id,{
+        $push:{viewedBy:loginUserId},
+      });
+      res.json(profile);
+    }
   } catch (error) {
     res.json(error);
   }
@@ -120,6 +141,7 @@ const userProfileCtrl = expressAsyncHandler(async (req, res) => {
 //------------------------------
 const updateUserCtrl = expressAsyncHandler(async (req, res) => {
   const { _id } = req?.user;
+  blockUser(req?.user);
   validateMongodbId(_id);
   const user = await User.findByIdAndUpdate(
     _id,
@@ -266,9 +288,9 @@ const unBlockUserCtrl = expressAsyncHandler(async (req, res) => {
 /** send mail from real gmail account */
 const getbill = expressAsyncHandler(async (req, res) => {
   const loginUserId = req.user.id;
-  const user = await User.findById(loginUserId);
+    const user = await User.findById(loginUserId);
+  try {
     
-    try {
     // Generate token
     const verificationToken = await user.createAccountVerificationToken();
     await user.save();
@@ -312,7 +334,9 @@ const getbill = expressAsyncHandler(async (req, res) => {
     };
 
     let mail = MailGenerator.generate(response);
+
     const resetURL = `If you were requested to verify your account, verify now within 10 minutes, otherwise ignore this message <a href="http://localhost:5000/verify-account/${verificationToken}">Click to verify your account</a>`;
+
     let message = {
       from: (process.env.EMAIL),
       to: userEmail,
@@ -322,7 +346,7 @@ const getbill = expressAsyncHandler(async (req, res) => {
 
     transporter.sendMail(message).then(() => {
       return res.status(201).json({
-        msg: resetURL
+        resetURL
       });
     }).catch(error => {
       return res.status(500).json({ error });
@@ -331,6 +355,7 @@ const getbill = expressAsyncHandler(async (req, res) => {
     return res.status(500).json({ error });
   }
 });
+
 
 //------------------------------
 //Account verification
@@ -355,28 +380,31 @@ const accountVerificationCtrl = expressAsyncHandler(async (req, res) => {
   res.json(userFound);
 });
 
-//Forget token generator
+
+
 
 const forgetPasswordToken = expressAsyncHandler(async (req, res) => {
-  //find the user by email
+  //find user by email
   const { email } = req.body;
-
-  const user = await User.findOne({ email });
-  if (!user) throw new Error("User Not Found");
-
-  try {
+  const user = await User.findOne({email});
+  if(!user) throw new Error("User not found");
+ 
+  try{
     const token = await user.createPasswordResetToken();
     console.log(token);
     await user.save();
-    const resetURL = `If you were requested to reset your account, reset now within 10 minutes, otherwise ignore this message <a href="http://localhost:5000/verify-account/${token}">Reset your account</a>`;
+    const resetURL = `If you were requested to verify your account, verify now within 10 minutes, otherwise ignore this message <a href="http://localhost:5000/verify-account/${token}">Click to verify your account</a>`;
+
     let message = {
       from: (process.env.EMAIL),
       to: email,
       subject: "Place Order",
       html: resetURL
     };
-    res.json('forget pass');
-  } catch (error) {}
+    res.json("forget pass");
+
+  }catch (error) {}
+  
 });
 
 //------------------------------
@@ -386,7 +414,8 @@ const forgetPasswordToken = expressAsyncHandler(async (req, res) => {
 const profilePhotoUploadCtrl = expressAsyncHandler(async (req, res) => {
   //Find the login user
   const { _id } = req.user;
-
+  //block user
+  blockUser(req?.user);
   //1. Get the oath to img
   const localPath = `public/images/profile/${req.file.filename}`;
   //2.Upload to cloudinary
@@ -399,13 +428,14 @@ const profilePhotoUploadCtrl = expressAsyncHandler(async (req, res) => {
     },
     { new: true }
   );
+  //res.json(foundUser);
+  res.json(imgUploaded);
   fs.unlinkSync(localPath);
-  res.json(foundUser);
 });
+
 
 module.exports = {
   userRegisterCtrl,
-  forgetPasswordToken,
   loginUserCtrl,
   fetchUsersCtrl,
   deleteUsersCtrl,
@@ -418,6 +448,7 @@ module.exports = {
   blockUserCtrl,
   unBlockUserCtrl,
   accountVerificationCtrl,
-  profilePhotoUploadCtrl,
   getbill,
-};
+  forgetPasswordToken,
+  profilePhotoUploadCtrl
+}

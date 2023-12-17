@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 //create schema
 const userSchema = new mongoose.Schema(
@@ -82,7 +82,7 @@ const userSchema = new mongoose.Schema(
       ],
     },
     passwordChangeAt: Date,
-    passwordResetToken: String,
+    passwordRessetToken: String,
     passwordResetExpires: Date,
 
     active: {
@@ -101,22 +101,23 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-//virtual method to populate created post
 userSchema.virtual("posts", {
   ref: "Post",
   foreignField: "user",
   localField: "_id",
 });
 
-//Hash password
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
-    next();
-  }
-  //hash password
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+//Account Type
+userSchema.virtual("accountType").get(function(){
+  const totalFollowers=this.followers?.length;
+  return totalFollowers>= 10 ? "Pro Account":"Starter Account";
+});
+
+//hashing
+userSchema.pre("save",async function(next){          // This line registers a pre-save middleware function for the "save" event in the user schema. It means that this function will be executed automatically just before saving a user object to the database.
+  const salt=await bcrypt.genSalt(10);                        //This line generates a salt using the bcrypt library. A salt is a random string used as an additional input during the hashing process to increase the security of the password. The genSalt function takes a cost factor as an argument, which determines the computational complexity of the hashing algorithm. In this case, the cost factor is set to 10.
+  this.password=await bcrypt.hash(this.password, salt);       //This line hashes the user's password using the bcrypt library. The hash function takes two arguments: the password to be hashed (this.password in this case) and the generated salt. It returns a hash of the password. The hashed password is then assigned to this.password, which will be saved to the database.
+  next();                                                   //his line calls the next function to proceed to the next middleware or save operation. It allows the execution flow to continue after the pre-save middleware has finished its tasks
 });
 
 //match password
@@ -132,21 +133,27 @@ userSchema.methods.createAccountVerificationToken = async function () {
     .createHash("sha256")
     .update(verificationToken)
     .digest("hex");
-  this.accountVerificationTokenExpires = Date.now() + 30 * 60 * 1000; //10 minutes
+  this.accountVerificationTokenExpires = Date.now() + 1 * 60 * 1000; //10 minutes
   return verificationToken;
 };
 
-//Password reset/forget
 
+//forget password token 
 userSchema.methods.createPasswordResetToken = async function () {
   const resetToken = crypto.randomBytes(32).toString("hex");
   this.passwordResetToken = crypto
     .createHash("sha256")
     .update(resetToken)
     .digest("hex");
+
   this.passwordResetExpires = Date.now() + 30 * 60 * 1000; //10 minutes
+
+
+
+  
   return resetToken;
 };
+
 
 //Compile schema into model
 const User = mongoose.model("User", userSchema);
