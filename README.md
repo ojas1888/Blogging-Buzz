@@ -57,7 +57,7 @@ yarn server
 ### Responsive
 ![image](https://github.com/ojas1888/Blogging-Buzz/assets/108984783/4349b85e-239f-4c69-9d9c-16ef0d82d864)
 
-## Contributer
+## Contributor
 - [Vagisha Gupta](https://github.com/vagisha312)
 
 
