@@ -23,7 +23,6 @@ const AddNewCategory = () => {
     },
     validationSchema: formSchema,
   });
-
   //get data from store
   const state = useSelector(state => state?.category);
 

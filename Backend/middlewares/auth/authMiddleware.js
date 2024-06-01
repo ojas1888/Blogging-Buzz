@@ -14,7 +14,7 @@ const authMiddleware = expressAsyncHandler(async (req, res, next) => {
         const user = await User.findById(decoded?.id).select("-password");
         //attach the user to the request object
         req.user = user;
-        next();
+        next(); //to go to the actual router
       }
     } catch (error) {
       throw new Error("Not authorized token expired, login again");
